@@ -1,0 +1,5 @@
+.qa/
+*.tar.gz
+qa-output/
+lab-arcade/
+node_modules/
