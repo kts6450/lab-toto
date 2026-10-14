@@ -11,7 +11,7 @@ window.LAB_ROOMS = (() => {
     renderControls,
   };
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
-    prefix = "dnslab-play-v1-";
+    prefix = "dnslab-play-v2-";
   let role = null,
     peer = null,
     code = "",
@@ -284,7 +284,9 @@ window.LAB_ROOMS = (() => {
       selectedClients().length +
       "명 준비 완료 / " +
       connected.length +
-      "명 입장 · 3명부터 시작";
+      "명 입장 · " +
+      Math.max(2, settings.duties.length) +
+      "명부터 시작";
     prior.renderMembers();
     publish();
   }
@@ -352,7 +354,15 @@ window.LAB_ROOMS = (() => {
       return null;
     const actors = message.actors.map((a) => {
       const member = MEMBERS.find((m) => m.id === a.id);
-      return member ? { ...a, ...member } : null;
+      return member
+        ? {
+            ...member,
+            ...a,
+            id: member.id,
+            name: member.name,
+            photo: member.photo,
+          }
+        : null;
     });
     if (actors.some((a) => !a)) return null;
     const refs = new Map(actors.map((a) => [a.id, a]));
@@ -403,6 +413,8 @@ window.LAB_ROOMS = (() => {
     if (role === "client") $("rejoinRoom").hidden = false;
   }
   function createRoom() {
+    if (window.appMode !== "party" && window.setAppMode)
+      window.setAppMode("party");
     if (location.protocol === "file:")
       return report(
         "휴대폰 함께 플레이는 온라인 사이트 https://kts6450.github.io/lab-toto/ 에서 방을 만들어주세요.",
@@ -500,7 +512,11 @@ window.LAB_ROOMS = (() => {
         return;
       }
       if (data.type === "input") {
-        if (performance.now() - c.lastInput < 35) return;
+        if (
+          performance.now() - c.lastInput < 20 &&
+          (data.x !== 0 || data.y !== 0)
+        )
+          return;
         c.lastInput = performance.now();
         const x = Number(data.x),
           y = Number(data.y);
@@ -583,6 +599,7 @@ window.LAB_ROOMS = (() => {
     $("controllerAction").disabled = true;
     $("controllerLive").hidden = true;
     $("controllerSteer").hidden = true;
+    $("controllerJoystick").hidden = true;
     $("controllerPlates").hidden = true;
     $("rejoinRoom").hidden = true;
     try {
@@ -633,7 +650,7 @@ window.LAB_ROOMS = (() => {
       clearTimeout(connectionTimer);
       phase = "lobby";
       $("controllerReady").hidden = false;
-      report("입장했어요! 준비 완료를 눌러주세요.");
+      report("입장했어요! 준비 완료를 누르면 조이스틱으로 직접 플레이합니다.");
       return;
     }
     if (data.type === "closed") {
@@ -649,6 +666,7 @@ window.LAB_ROOMS = (() => {
       if (!data.playing) {
         remote = null;
         phase = "lobby";
+        $("controllerJoystick").hidden = true;
         $("controllerLive").hidden = true;
         $("controllerReady").hidden = false;
         $("controllerAction").disabled = true;
@@ -671,9 +689,14 @@ window.LAB_ROOMS = (() => {
       const next = unpack(data);
       if (!next) return;
       remote = next;
+      remote.viewerId = identity.id;
       roomEpoch = data.epoch;
       lastSnapshot = performance.now();
-      if (Array.isArray(data.duties) && data.duties.length === 3)
+      if (
+        Array.isArray(data.duties) &&
+        data.duties.length > 0 &&
+        data.duties.length <= 16
+      )
         settings.duties = data.duties;
       phase = next.ended ? "result" : "playing";
       $("controllerReady").hidden = true;
@@ -683,7 +706,19 @@ window.LAB_ROOMS = (() => {
       return;
     }
   }
-  let remoteDrawAt = 0;
+  let remoteDrawAt = 0,
+    nearView = true;
+  const viewButton = node(
+    "button",
+    null,
+    "controller-view-btn",
+    "전체 경기장 보기",
+  );
+  $("controllerLive").append(viewButton);
+  viewButton.onclick = () => {
+    nearView = !nearView;
+    viewButton.textContent = nearView ? "전체 경기장 보기" : "내 주변 확대";
+  };
   function renderRemote(now) {
     clientFrame = 0;
     if (role !== "client" || !remote || controller.hidden) return;
@@ -694,6 +729,12 @@ window.LAB_ROOMS = (() => {
     remoteDrawAt = now;
     const c = liveCanvas.getContext("2d");
     c.setTransform(1, 0, 0, 1, 0, 0);
+    const me = remote.actors.find((a) => a.id === identity.id);
+    if (nearView && me) {
+      const x = Math.max(0, Math.min(600, me.x - 300)),
+        y = Math.max(0, Math.min(360, me.y - 180));
+      c.setTransform(2, 0, 0, 2, -x * 2, -y * 2);
+    }
     draw(remote, c);
     clientFrame = requestAnimationFrame(renderRemote);
   }
@@ -704,115 +745,67 @@ window.LAB_ROOMS = (() => {
     return turnActor(r)?.id === a.id;
   }
   function eligible(r, a) {
-    if (
-      !a ||
-      a.picked ||
-      r.ended ||
-      r.paused ||
-      r.countdown > 0 ||
-      r.picks.length >= 3
-    )
-      return false;
-    if (["balloon", "press", "sushi", "ladder", "rhythm"].includes(r.g.id))
-      return (
-        isTurn(r, a) && (r.g.id === "rhythm" ? !r.hit : r.phase === "idle")
-      );
-    if (r.g.id === "wheel") return r.phase === "spinning";
-    if (r.g.id === "bomb") return r.holder?.id === a.id && !r.throwing;
-    return true;
+    return (
+      !!a &&
+      isMultiplayer(r.g) &&
+      !a.picked &&
+      !r.ended &&
+      !r.paused &&
+      r.countdown <= 0 &&
+      r.picks.length < r.targetCount &&
+      a.respawn <= r.time &&
+      a.finishTime === null
+    );
   }
   const controls = {
-    pinball: [
-      "내 공 튕기기!",
-      "화살표로 내 공을 밀고, 버튼으로 위로 튕깁니다.",
+    arena: [
+      "대시로 밀어내기!",
+      "조이스틱을 움직여 직접 이동하세요. 대시로 상대를 밀어낼 수 있습니다.",
     ],
-    horse: ["내 말 부스터!", "내 말에만 부스터를 씁니다. 재충전은 4초입니다."],
-    redlight: [
-      "달리기 / 멈추기",
-      "↑를 누르는 동안 달립니다. 빨간불이 켜지면 손을 떼세요! 결승 45초 후에는 누적 주행거리 하위 참가자가 선정됩니다.",
-    ],
-    balloon: [
-      "내 차례 · 펌프질!",
-      "내 차례에만 펌프질합니다. 터뜨리면 내 위험도가 올라갑니다.",
-    ],
-    press: [
-      "내 차례 · 레버 당기기!",
-      "내 차례에만 레버를 당깁니다. 압력에 주의하세요.",
-    ],
-    sushi: [
-      "랜덤 접시 고르기",
-      "내 차례에는 아래 접시를 직접 고를 수 있습니다.",
-    ],
-    ladder: [
-      "내 튜브 출발!",
-      "내 차례에 출발합니다. 진행자도 출발시킬 수 있습니다.",
-    ],
-    wheel: [
-      "원판 급브레이크!",
-      "모두 브레이크에 참여합니다. 원판 시작은 진행자가 합니다.",
-    ],
-    bullets: [
+    laser: [
       "내 방어막!",
-      "화살표로 내 얼굴을 움직입니다. 방어막은 내 캐릭터에만 2초 적용됩니다.",
+      "레이저와 탄을 직접 피하세요. 방어막은 나에게만 적용됩니다.",
     ],
-    rhythm: ["내 박자 · 지금!", "내 차례의 박자를 보고 버튼을 누르세요."],
-    lava: [
-      "내 발판 점프!",
-      "화살표로 방향을 고르고 버튼으로 안전한 발판을 찾아 점프합니다.",
+    coins: [
+      "스틸 대시!",
+      "직접 이동해 코인을 수집하세요. 대시 충돌로 코인을 빼앗습니다.",
     ],
-    vortex: [
-      "내 중력 반전!",
-      "내 캐릭터만 블랙홀에서 밀어냅니다. 화살표로 궤도에 개입하세요.",
+    paint: [
+      "페인트 폭탄!",
+      "이동한 바닥이 내 색이 됩니다. 폭탄으로 주변 칸을 점령합니다.",
     ],
-    bomb: ["폭탄 패스!", "내가 폭탄을 들고 있을 때만 패스할 수 있습니다."],
-    curling: [
-      "내 퍽 부스트!",
-      "화살표로 부스트 방향을 고른 뒤 버튼을 누르세요.",
-    ],
-    coaster: [
-      "내 서킷브레이커!",
-      "내 가상 가격에만 3초 동안 급락 방어를 적용합니다.",
+    rally: [
+      "니트로!",
+      "조이스틱으로 직접 운전하세요. 숫자 순서대로 체크포인트를 찍습니다.",
     ],
   };
+
   function renderController() {
     const r = remote;
     if (!r) return;
     const a = r.actors.find((a) => a.id === identity.id),
       can = eligible(r, a),
-      now = Math.floor(r.age || 0),
-      remaining = a ? Math.max(0, (a.roomCooldown || 0) - r.time) : 0;
+      remaining = a ? Math.max(0, (a.roomCooldown || 0) - r.time) : 0,
+      left = Math.max(0, Math.ceil(r.duration - r.age));
     $("controllerGame").textContent = r.g.icon + " " + r.g.name;
     $("controllerPhase").textContent =
-      (r.battlePhase === "final" ? "FINAL" : "QUALIFIER") +
-      " · " +
-      String(Math.floor(now / 60)).padStart(2, "0") +
-      ":" +
-      String(now % 60).padStart(2, "0") +
-      " · " +
-      r.map.name;
+      "DIRECT BATTLE · " + left + "초 · " + r.map.name;
     $("controllerNote").textContent = controls[r.g.id][1];
-    const target = turnActor(r);
     $("controllerStatus").textContent = r.ended
-      ? "이번 판 결과가 나왔어요! 다음 게임은 진행자가 고릅니다."
+      ? "이번 판 결과가 나왔어요! 다음 대결은 진행자가 고릅니다."
       : r.paused
         ? "진행자가 잠깐 멈췄어요."
         : r.countdown > 0
           ? "곧 시작! 준비하세요."
           : !a
-            ? "이번 판은 관전 중 · 다음 판부터 참여할 수 있어요."
+            ? "이번 판은 관전 중 · 다음 판부터 참여합니다."
             : a.picked
-              ? "이번 판 담당 확정! 남은 사람들의 결과를 지켜보세요."
-              : ["balloon", "press", "sushi", "ladder", "rhythm"].includes(
-                    r.g.id,
-                  )
-                ? isTurn(r, a)
-                  ? "지금 내 차례!"
-                  : (target?.name || "다음 참가자") + " 차례를 기다리는 중…"
-                : r.g.id === "bomb"
-                  ? r.holder?.id === a.id
-                    ? "내가 폭탄을 들고 있어요! 빨리 패스!"
-                    : (r.holder?.name || "누군가") + "에게 폭탄이 있어요."
-                  : r.announcement;
+              ? "이번 판 담당 확정!"
+              : a.finishTime !== null
+                ? "완주! 다른 참가자들의 기록을 기다리는 중…"
+                : a.respawn > r.time
+                  ? "피격·추락! 잠시 후 재투입됩니다."
+                  : "내 조이스틱으로 직접 이동하고 스킬을 사용하세요.";
     $("controllerAction").disabled = !can || remaining > 0;
     $("controllerAction").textContent =
       !a || a.picked
@@ -821,57 +814,26 @@ window.LAB_ROOMS = (() => {
           ? "재충전 " + Math.ceil(remaining) + "초"
           : controls[r.g.id][0];
     $("controllerSelf").replaceChildren();
-    if (a) {
+    if (a)
       $("controllerSelf").append(
-        el("span", "", "위험도 " + a.risk),
-        el(
-          "span",
-          "",
-          r.battlePhase === "final" ? "목숨 " + a.life : "예선 · 재투입 가능",
-        ),
+        el("span", "controller-score", "내 점수 " + MULTIPLAYER.value(r, a)),
+        el("span", "", left + "초 남음"),
+        el("span", "", "피격·추락 " + a.deaths + "회"),
       );
-      if (r.g.id === "coaster")
-        $("controllerSelf").append(
-          el("span", "", "내 가격 " + a.price.toFixed(1)),
-        );
-    }
-    $("controllerSteer").hidden =
-      !a ||
-      a.picked ||
-      !["pinball", "redlight", "bullets", "lava", "vortex", "curling"].includes(
-        r.g.id,
-      );
-    $("controllerPlates").hidden = r.g.id !== "sushi" || !a;
-    const plates = $("controllerPlates");
-    if (r.g.id === "sushi") {
-      const signature =
-        r.plates.map((p) => (p.open ? 1 : 0)).join("") + ":" + can;
-      if (plates.dataset.signature !== signature) {
-        plates.dataset.signature = signature;
-        plates.replaceChildren();
-        r.plates.forEach((p) => {
-          const b = el("button", "", p.open ? "✓" : "🍣 " + (p.i + 1));
-          b.disabled = !can || p.open;
-          b.dataset.plate = p.i;
-          b.onclick = () =>
-            sendHost({
-              type: "action",
-              epoch: roomEpoch,
-              game: r.g.id,
-              plate: p.i,
-            });
-          plates.append(b);
-        });
-      }
-    }
-    const pickSignature =
+    $("controllerSteer").hidden = true;
+    $("controllerPlates").hidden = true;
+    $("controllerJoystick").hidden = !a || a.picked || r.ended;
+    $("controllerJoystick").style.pointerEvents =
+      r.paused || r.countdown > 0 ? "none" : "";
+    if (r.paused && (inputDirection.x || inputDirection.y)) releaseStick();
+    const signature =
       r.g.id +
       ":" +
       settings.duties.join("|") +
       ":" +
       r.picks.map((p) => p.id).join(",");
-    if ($("controllerPicks").dataset.signature === pickSignature) return;
-    $("controllerPicks").dataset.signature = pickSignature;
+    if ($("controllerPicks").dataset.signature === signature) return;
+    $("controllerPicks").dataset.signature = signature;
     $("controllerPicks").replaceChildren();
     settings.duties.forEach((d, i) => {
       const p = r.picks[i],
@@ -961,88 +923,12 @@ window.LAB_ROOMS = (() => {
     )
       return;
     client.lastAction = performance.now();
-    const held = inputs.get(a.id);
-    const direction = {
-      x: held?.aimX || held?.x || 0,
-      y: held?.aimY || held?.y || 0,
-    };
-    const id = r.g.id;
-    if (["balloon", "press", "ladder", "rhythm"].includes(id)) action();
-    else if (id === "sushi") {
-      if (
-        Number.isInteger(data.plate) &&
-        data.plate >= 0 &&
-        data.plate < r.plates.length
-      )
-        chooseSushi(data.plate);
-      else action();
-    } else if (id === "pinball") {
-      a.vy -= 160;
-      a.vx += (direction.x || rng() - 0.5) * 200;
-      a.roomCooldown = r.time + 1.2;
-    } else if (id === "horse") {
-      a.boost = 1.2;
-      a.stun = 0;
-      a.roomCooldown = r.time + 4;
-    } else if (id === "redlight") {
-      const moving = inputs.get(a.id)?.y < 0;
-      inputs.set(a.id, {
-        x: 0,
-        y: moving ? 0 : -1,
-        at: performance.now(),
-        latched: true,
-      });
-    } else if (id === "wheel") {
-      if (r.phase === "spinning") {
-        r.omega *= 0.7;
-        a.roomCooldown = r.time + 1.8;
-      }
-    } else if (id === "bullets") {
-      a.roomShieldUntil = r.time + 2.2;
-      a.roomCooldown = r.time + 8;
-    } else if (id === "lava") {
-      const safe = r.tiles.filter((t) => t.solid && !t.warn && t.i !== a.tile);
-      if (safe.length) {
-        const dx = direction.x,
-          dy = direction.y;
-        safe.sort((t, u) => {
-          function distance(p) {
-            const x = p.x - a.x,
-              y = p.y - a.y,
-              d = Math.hypot(x, y);
-            return d - (dx * x + dy * y) * 0.7;
-          }
-          return distance(t) - distance(u);
-        });
-        const tile = safe[0];
-        a.tile = tile.i;
-        a.x = tile.x;
-        a.y = tile.y;
-        a.roomCooldown = r.time + 1.3;
-      }
-    } else if (id === "vortex") {
-      const h = holes(r)
-          .slice()
-          .sort(
-            (p, q) =>
-              Math.hypot(a.x - p.x, a.y - p.y) -
-              Math.hypot(a.x - q.x, a.y - q.y),
-          )[0],
-        dx = a.x - h.x,
-        dy = a.y - h.y,
-        d = Math.max(1, Math.hypot(dx, dy));
-      a.vx += (dx / d) * 270;
-      a.vy += (dy / d) * 210;
-      a.roomCooldown = r.time + 6;
-    } else if (id === "bomb") action();
-    else if (id === "curling") {
-      a.vx += (direction.x || rng() - 0.5) * 400;
-      a.vy += (direction.y || rng() - 0.5) * 320;
-      a.roomCooldown = r.time + 3;
-    } else if (id === "coaster") {
-      a.roomHedgeUntil = r.time + 3.5;
-      a.roomCooldown = r.time + 12;
-    }
+    const held = inputs.get(a.id),
+      direction = {
+        x: held?.x || held?.aimX || 0,
+        y: held?.y || held?.aimY || 0,
+      };
+    MULTIPLAYER.perform(r, a, direction);
     snapshot();
   }
   activeMembers = function () {
@@ -1056,99 +942,30 @@ window.LAB_ROOMS = (() => {
   };
   startGame = function () {
     if (role === "client") return;
-    if (role === "host" && selectedClients().length < 3)
-      return toast("입장 후 준비 완료한 사람이 3명 이상 필요해요.");
+    const game = GAMES.find((g) => g.id === settings.selected);
+    if (!isMultiplayer(game)) {
+      if (role === "host")
+        return toast("대결 방에서는 전용 대결 게임을 골라주세요.");
+      return prior.startGame();
+    }
+    if (role !== "host") {
+      openModal("roomModal");
+      return;
+    }
+    const need = Math.max(2, settings.duties.length);
+    if (selectedClients().length < need)
+      return toast("준비 완료한 사람이 " + need + "명 이상 필요해요.");
     prior.startGame();
-    if (role === "host" && run) {
+    if (run) {
       run.roomEpoch = ++roomEpoch;
       run.roomInputs = true;
       inputs.clear();
-      run.actors.forEach((a) => {
-        a.roomCooldown = 0;
-        a.roomShieldUntil = 0;
-        a.roomHedgeUntil = 0;
-        a.roomMoving = false;
-        a.roomDistance = 0;
-      });
       publish();
       snapshot();
     }
   };
-  toggleRed = function (r) {
-    prior.toggleRed(r);
-    if (r.roomInputs && r.light === "red")
-      r.actors.forEach((a) => {
-        a.reaction = 0;
-      });
-  };
   update = function (r, dt) {
-    if (!r.roomInputs) return prior.update(r, dt);
-    const id = r.g.id,
-      auto = r.auto;
-    r.auto = ["redlight", "wheel"].includes(id);
-    const beforePositions =
-      id === "redlight" ? new Map(r.actors.map((a) => [a.id, a.x])) : null;
-    let defended = false;
-    for (const a of r.actors.filter((a) => !a.picked)) {
-      const i = inputs.get(a.id),
-        fresh = i && (i.latched || performance.now() - i.at < 450),
-        x = fresh ? i.x : 0,
-        y = fresh ? i.y : 0;
-      if (id === "pinball") a.vx += x * 220 * dt;
-      else if (id === "bullets") {
-        a.vx = x * 200;
-        a.vy = y * 200;
-      } else if (id === "vortex") {
-        a.vx += x * 100 * dt;
-        a.vy += y * 100 * dt;
-      } else if (id === "redlight") {
-        a.roomMoving = y < 0;
-        a.speed = a.roomMoving ? 62 : 0;
-        if (r.light === "red")
-          a.reaction = a.roomMoving
-            ? 1
-            : Math.min(a.reaction || 0, r.time - r.redAt);
-      }
-      if (id === "bullets" && a.roomShieldUntil > r.time) defended = true;
-    }
-    if (defended) r.roomPersonalShields = true;
     prior.update(r, dt);
-    r.auto = auto;
-    if (beforePositions)
-      r.actors.forEach(
-        (a) =>
-          (a.roomDistance =
-            (a.roomDistance || 0) +
-            Math.max(0, a.x - beforePositions.get(a.id))),
-      );
-    if (id === "redlight" && r.light === "red" && r.time - r.redAt > 0.41) {
-      for (const a of r.actors.filter(
-        (a) => !a.picked && !a.finished && a.roomMoving,
-      )) {
-        if (a.roomRedCaught !== r.redAt) {
-          a.roomRedCaught = r.redAt;
-          record(a);
-        }
-      }
-    }
-    if (
-      id === "redlight" &&
-      r.battlePhase === "final" &&
-      r.age - r.finalAt >= 45 &&
-      r.picks.length < 3 &&
-      !r.roomRankingResolved
-    ) {
-      r.roomRankingResolved = true;
-      announce("결승 종료! 누적 주행거리 하위 참가자 선정.");
-      shuffle(alive(r))
-        .sort((a, b) => (a.roomDistance || 0) - (b.roomDistance || 0))
-        .slice(0, 3 - r.picks.length)
-        .forEach((a) => {
-          a.life = 1;
-          a.lastDamage = -10;
-          record(a);
-        });
-    }
   };
   renderControls = function () {
     prior.renderControls();
@@ -1262,7 +1079,10 @@ window.LAB_ROOMS = (() => {
   setInterval(() => {
     if (role === "host") {
       const now = performance.now();
-      if (now - lastHostSnapshot >= (run?.g.id === "rhythm" ? 35 : 140)) {
+      if (
+        now - lastHostSnapshot >=
+        (run?.ended ? 600 : isMultiplayer(run?.g) ? 35 : 140)
+      ) {
         snapshot();
         lastHostSnapshot = now;
       }
@@ -1287,6 +1107,102 @@ window.LAB_ROOMS = (() => {
       );
     }
   }, 35);
+
+  const pad = node("div", null, "controller-playpad"),
+    stick = node("div", "controllerJoystick", "controller-joystick"),
+    knob = node("div", null, "joystick-knob");
+  stick.setAttribute("aria-label", "내 캐릭터 이동 조이스틱");
+  stick.append(knob);
+  stick.hidden = true;
+  $("controllerAction").before(pad);
+  pad.append(stick, $("controllerAction"));
+  let stickPointer = null;
+  function stickInput(e) {
+    const rect = stick.getBoundingClientRect(),
+      radius = rect.width * 0.3,
+      dx = (e.clientX - rect.left - rect.width / 2) / radius,
+      dy = (e.clientY - rect.top - rect.height / 2) / radius,
+      d = Math.max(1, Math.hypot(dx, dy));
+    inputDirection = {
+      x: Math.abs(dx) < 0.09 ? 0 : dx / d,
+      y: Math.abs(dy) < 0.09 ? 0 : dy / d,
+    };
+    knob.style.transform =
+      "translate(" +
+      inputDirection.x * radius +
+      "px," +
+      inputDirection.y * radius +
+      "px)";
+    sendHost({ type: "input", ...inputDirection });
+    if (!inputTick)
+      inputTick = setInterval(
+        () => sendHost({ type: "input", ...inputDirection }),
+        75,
+      );
+  }
+  function releaseStick() {
+    stickPointer = null;
+    inputDirection = { x: 0, y: 0 };
+    knob.style.transform = "";
+    clearInterval(inputTick);
+    inputTick = null;
+    sendHost({ type: "input", x: 0, y: 0 });
+  }
+  stick.onpointerdown = (e) => {
+    if (phase !== "playing") return;
+    e.preventDefault();
+    stickPointer = e.pointerId;
+    stick.setPointerCapture(e.pointerId);
+    stickInput(e);
+  };
+  stick.onpointermove = (e) => {
+    if (e.pointerId === stickPointer) {
+      e.preventDefault();
+      stickInput(e);
+    }
+  };
+  stick.onpointerup = releaseStick;
+  stick.onpointercancel = releaseStick;
+  stick.onlostpointercapture = releaseStick;
+  document.addEventListener("keydown", (e) => {
+    if (
+      role !== "client" ||
+      phase !== "playing" ||
+      e.repeat ||
+      /INPUT|TEXTAREA/.test(document.activeElement.tagName)
+    )
+      return;
+    const direction = {
+      ArrowLeft: "left",
+      KeyA: "left",
+      ArrowRight: "right",
+      KeyD: "right",
+      ArrowUp: "up",
+      KeyW: "up",
+      ArrowDown: "down",
+      KeyS: "down",
+    }[e.code];
+    if (direction) {
+      e.preventDefault();
+      directions.set(e.code, direction);
+      steer();
+    }
+    if (e.code === "Space") {
+      e.preventDefault();
+      $("controllerAction").click();
+    }
+  });
+  document.addEventListener("keyup", (e) => {
+    if (directions.has(e.code)) {
+      e.preventDefault();
+      directions.delete(e.code);
+      steer();
+    }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && role === "client") releaseStick();
+  });
+
   const query = new URLSearchParams(location.search).get("room");
   if (query) {
     codeInput.value = query.trim().toUpperCase();

@@ -1,0 +1,362 @@
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 2px 0 32px;
+}
+.mode-switch button {
+  position: relative;
+  text-align: left;
+  padding: 24px 27px;
+  border: 1px solid #43536a;
+  border-radius: 14px;
+  background: #1b2538;
+  color: #b4c3d8;
+  overflow: hidden;
+}
+.mode-switch button.active {
+  border-color: #f4aa7e;
+  background: linear-gradient(120deg, #473129, #252436);
+}
+.mode-switch button[data-mode="party"].active {
+  border-color: #98dcd2;
+  background: linear-gradient(120deg, #173e43, #25243e);
+}
+.mode-switch small {
+  font: 9px monospace;
+  letter-spacing: 2px;
+  color: #93a9c4;
+}
+.mode-switch strong {
+  display: block;
+  font-size: 25px;
+  color: #eef1de;
+  margin: 10px 0;
+}
+.mode-switch span {
+  font-size: 12px;
+  line-height: 1.9;
+  color: #aebcd1;
+}
+.mode-switch button:after {
+  content: "↗";
+  position: absolute;
+  right: 25px;
+  top: 33px;
+  font-size: 43px;
+  color: #d5eacd33;
+}
+.duty-editor > label {
+  font-size: 12px;
+}
+.duty-editor label small {
+  display: block;
+  margin-top: 6px;
+  font-size: 9px;
+  color: #b3cfa3;
+}
+.duty-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 8px 0;
+}
+.duty-order {
+  font: 9px monospace;
+  color: #9bb1c1;
+  flex: 0 0 17px;
+}
+.duty-editor-row input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  background: #121f30;
+  border: 1px solid #4b5f78;
+  border-radius: 5px;
+  padding: 10px;
+  color: #d2def1;
+  font-size: 11px;
+}
+.duty-remove {
+  flex: 0 0 27px;
+  height: 32px;
+  border: 1px solid #5d4561;
+  background: #392e45;
+  color: #edb3c2;
+  border-radius: 5px;
+}
+.duty-editor #addDuty {
+  width: 100%;
+  margin-top: 5px;
+}
+.map-option .map-art {
+  display: none;
+}
+.map-option canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 5/3;
+  border-radius: 6px;
+  background: #142032;
+  margin-bottom: 12px;
+  border: 1px solid #475f77;
+}
+.map-option {
+  padding: 10px 10px 14px;
+}
+.map-option strong {
+  font-size: 13px;
+}
+.map-option:after {
+  display: none;
+}
+.map-option .map-difference {
+  display: block;
+  color: var(--map-color);
+  font-size: 10px;
+  margin: 8px 0 0;
+  line-height: 1.7;
+}
+#partyRoomTools {
+  background: #233c42;
+  border: 1px solid #57958e;
+  border-radius: 12px;
+  padding: 19px;
+  margin: 0 0 22px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+#partyRoomTools p {
+  font-size: 11px;
+  color: #a8c7cc;
+  line-height: 1.9;
+  margin: 0;
+}
+#partyRoomTools button {
+  background: #a4e0c9;
+  color: #153136;
+}
+.party-mode .source-note {
+  display: none;
+}
+.party-mode .game-choose h3 {
+  color: #c5efce;
+}
+.party-mode .game-tag {
+  background: #2f4550;
+  color: #bdddc8;
+}
+.party-mode .hero-tags span:first-child {
+  color: #9ce4d3;
+}
+.slots {
+  display: flex !important;
+  overflow-x: auto;
+  flex: 1;
+  gap: 8px;
+  scrollbar-width: thin;
+}
+.duty-slot {
+  min-width: 150px;
+  flex: 1;
+}
+.controller-picks {
+  grid-template-columns: repeat(auto-fit, minmax(95px, 1fr));
+}
+.controller-playpad {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  justify-content: space-between;
+  margin: 16px 0;
+}
+.controller-joystick {
+  position: relative;
+  touch-action: none;
+  user-select: none;
+  border: 2px solid #88bfa9;
+  background: radial-gradient(circle, #577786, #243e51 66%);
+  border-radius: 50%;
+  width: 138px;
+  height: 138px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 20px #0d1a28;
+}
+.controller-joystick:before {
+  content: "↑";
+  position: absolute;
+  top: 7px;
+  left: calc(50% - 5px);
+  font-size: 15px;
+  color: #bde6d0;
+}
+.controller-joystick:after {
+  content: "이동";
+  position: absolute;
+  bottom: 9px;
+  left: calc(50% - 14px);
+  font-size: 11px;
+  color: #bde6d0;
+}
+.joystick-knob {
+  position: absolute;
+  left: 44px;
+  top: 44px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 2px solid #d8f0b9;
+  background: #9ccead;
+  box-shadow: 0 3px 10px #07112099;
+  pointer-events: none;
+}
+.controller-playpad .controller-action {
+  width: auto;
+  flex: 1;
+  min-height: 100px;
+  padding: 17px 12px;
+  font-size: 17px;
+  touch-action: manipulation;
+}
+.controller-score {
+  color: #e1f0a5 !important;
+}
+.map-picker-heading h3 {
+  max-width: 600px;
+}
+.party-mode #soloSettings {
+  display: none;
+}
+.role-list-title {
+  font-size: 13px;
+  color: #b0d7a4;
+}
+.mode-summary {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #a9bfd2;
+  margin: 0 0 18px;
+}
+.room-host-bar {
+  margin-top: 15px;
+}
+.room-intro strong {
+  color: #d5f476;
+}
+@media (max-width: 760px) {
+  .mode-switch {
+    gap: 9px;
+    margin-bottom: 24px;
+  }
+  .mode-switch button {
+    padding: 15px;
+  }
+  .mode-switch strong {
+    font-size: 20px;
+    margin: 10px 0;
+  }
+  .mode-switch small {
+    font-size: 7px;
+    letter-spacing: 1px;
+  }
+  .mode-switch span {
+    font-size: 10px;
+  }
+  .mode-switch button:after {
+    right: 10px;
+    top: 10px;
+    font-size: 28px;
+  }
+  .map-option {
+    padding: 6px 6px 10px;
+  }
+  .map-option canvas {
+    margin-bottom: 9px;
+  }
+  .map-option strong {
+    font-size: 10px;
+  }
+  .map-option .map-difference {
+    font-size: 8px;
+  }
+  .map-option small {
+    font-size: 8px;
+  }
+  .duty-editor-row input {
+    font-size: 11px;
+    padding: 9px;
+  }
+  .duty-order {
+    font-size: 8px;
+  }
+  .duty-slot {
+    min-width: 110px;
+    flex: 0 0 auto;
+  }
+  .slots {
+    flex-basis: 100%;
+  }
+  .controller-playpad {
+    gap: 15px;
+  }
+  .controller-joystick {
+    width: 128px;
+    height: 128px;
+  }
+  .joystick-knob {
+    left: 39px;
+    top: 39px;
+  }
+  .controller-playpad .controller-action {
+    font-size: 15px;
+    min-height: 95px;
+  }
+  #partyRoomTools {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+  }
+  #partyRoomTools button {
+    width: 100%;
+  }
+  .map-picker-heading .text-btn {
+    white-space: nowrap;
+  }
+  .room-members {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.party-mode .member .check {
+  display: none;
+}
+.direct-match .game-caption {
+  top: 12px;
+}
+.direct-match .game-caption small,
+.direct-match .game-caption span {
+  display: none;
+}
+.direct-match .game-caption strong {
+  font-size: 20px;
+  margin: 10px 0;
+}
+.direct-match .battle-hud {
+  top: 65px;
+  width: 85%;
+  max-width: 780px;
+  padding: 7px 12px;
+}
+.controller-view-btn {
+  position: absolute;
+  right: 7px;
+  top: 7px;
+  font-size: 9px;
+  padding: 7px 9px;
+  border: 1px solid #91aeba;
+  border-radius: 5px;
+  background: #193044dc;
+  color: #c9e4d8;
+}
